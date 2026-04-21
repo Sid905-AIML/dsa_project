@@ -3,5 +3,9 @@
 *.o
 *.out
 
+# Node / web UI
+node_modules/
+web/node_modules/
+
 # VS Code settings (optional to keep)
 .vscode/
