@@ -15,6 +15,7 @@
         </div>
         <div class="topbar__right">
           <button id="refreshBtn" class="btn btn--ghost">Refresh</button>
+          <button id="resetBtn" class="btn btn--ghost">Reset demo state</button>
           <div id="serverTime" class="muted"></div>
         </div>
       </header>
@@ -50,7 +51,17 @@
           <div class="card">
             <div class="card__title">Sharing</div>
             <div class="muted">
-              If you enabled sharing, you can search for active rides going the same way.
+              Select where you want to be picked up and dropped (must be on the trip route), then search rides going the same way.
+            </div>
+            <div class="grid" style="margin-top:10px">
+              <label class="field">
+                <span>Share pickup (From)</span>
+                <select id="shareFromCity"></select>
+              </label>
+              <label class="field">
+                <span>Share drop (To)</span>
+                <select id="shareToCity"></select>
+              </label>
             </div>
             <div class="row">
               <button id="findShareBtn" class="btn">Find share rides</button>

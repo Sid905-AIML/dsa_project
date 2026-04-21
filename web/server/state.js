@@ -126,22 +126,10 @@ export function snapshot() {
   };
 }
 
-function nearestIdleDriver(fromCityId) {
-  const idle = state.drivers.filter((d) => d.status === "idle");
-  if (idle.length === 0) return null;
-  let best = null;
-  let bestDist = Infinity;
-  for (const d of idle) {
-    const sp = shortestPath(d.cityId, fromCityId);
-    if (sp.distance < bestDist) {
-      bestDist = sp.distance;
-      best = d;
-    }
-  }
-  return best;
-}
-
 export function createRideRequest({ userName, fromCityId, toCityId, wantsSharing }) {
+  if (fromCityId === toCityId) {
+    return { ok: false, error: "From and To cannot be the same city." };
+  }
   const route = shortestPath(fromCityId, toCityId);
   if (!route.path.length) {
     return { ok: false, error: "No route found between selected cities." };
@@ -160,11 +148,6 @@ export function createRideRequest({ userName, fromCityId, toCityId, wantsSharing
     assignedDriverId: null,
     rideId: null
   };
-
-  const driver = nearestIdleDriver(fromCityId);
-  if (driver) {
-    request.assignedDriverId = driver.id;
-  }
 
   state.requests.push(request);
   state.notifications.push({
@@ -227,7 +210,10 @@ export function driverRespond({ driverId, requestId, accept }) {
   req.rideId = ride.id;
   req.assignedDriverId = driverId;
   driver.status = "on_ride";
-  driver.cityId = req.toCityId;
+  // Keep driver at pickup location while ride is active.
+  // (We don't simulate time/progress yet, so moving to destination here
+  // would incorrectly make mid-route pickups impossible.)
+  driver.cityId = req.fromCityId;
 
   state.rides.push(ride);
   state.notifications.push({
@@ -257,17 +243,40 @@ function sameDirectionRouteScore(aRoute, bRoute) {
   return best;
 }
 
+function indexOnRoute(route, cityId) {
+  if (!route?.path?.length) return -1;
+  return route.path.indexOf(cityId);
+}
+
+function pickupDropAvailableOnRide(ride, pickupCityId, dropCityId) {
+  const p = indexOnRoute(ride.route, pickupCityId);
+  const d = indexOnRoute(ride.route, dropCityId);
+  if (p === -1 || d === -1) return { ok: false, reason: "Pickup/drop not on this trip route." };
+  if (p > d) return { ok: false, reason: "Drop must come after pickup on the route." };
+  return { ok: true };
+}
+
 export function listShareCandidates(requestId) {
   const req = state.requests.find((r) => r.id === requestId);
   if (!req) return { ok: false, error: "Request not found." };
   if (!req.wantsSharing) return { ok: false, error: "Request not marked for sharing." };
-  if (req.status !== "pending_driver") return { ok: false, error: "Sharing is only available before driver acceptance." };
+  if (req.rideId) return { ok: false, error: "This request is already in an active ride." };
+  if (req.status === "cancelled" || req.status === "declined") return { ok: false, error: "This request is not eligible for sharing." };
 
   const candidates = state.rides
-    .filter((ride) => ride.status === "active")
+    // Show rides regardless of active/completed status.
     .map((ride) => {
       const score = sameDirectionRouteScore(req.route, ride.route);
-      return { rideId: ride.id, driverName: ride.driverName, driverId: ride.driverId, score, route: ride.route };
+      const availability = pickupDropAvailableOnRide(ride, req.fromCityId, req.toCityId);
+      return {
+        rideId: ride.id,
+        driverName: ride.driverName,
+        driverId: ride.driverId,
+        rideStatus: ride.status,
+        score,
+        route: ride.route,
+        canUseDefaultPickupDrop: availability.ok
+      };
     })
     .filter((c) => c.score >= 2);
 
@@ -281,6 +290,11 @@ export function proposeShare({ requestId, rideId, pickupCityId, dropCityId }) {
   if (!ride) return { ok: false, error: "Ride not found." };
   if (req.status !== "pending_driver") return { ok: false, error: "Request is not pending." };
   if (!req.wantsSharing) return { ok: false, error: "Request not marked for sharing." };
+  if (req.rideId) return { ok: false, error: "This request is already in a ride." };
+  if (ride.status !== "active") return { ok: false, error: "You can only share into an active ride." };
+
+  const availability = pickupDropAvailableOnRide(ride, pickupCityId, dropCityId);
+  if (!availability.ok) return { ok: false, error: availability.reason };
 
   const proposal = {
     id: id("share"),
@@ -358,5 +372,27 @@ export function decideShare({ rideId, proposalId, accept }) {
   });
 
   return { ok: true, ride, pricing };
+}
+
+const initialDrivers = [
+  { id: "d1", name: "Ravi", cityId: "amritsar", status: "idle" },
+  { id: "d2", name: "Priya", cityId: "ludhiana", status: "idle" },
+  { id: "d3", name: "Arjun", cityId: "bathinda", status: "idle" },
+  { id: "d4", name: "Simran", cityId: "jalandhar", status: "idle" }
+];
+
+export function resetDemoState() {
+  state.drivers = initialDrivers.map((d) => ({ ...d }));
+  state.requests = [];
+  state.rides = [];
+  state.notifications = [];
+  nextId = 1;
+  state.notifications.push({
+    id: id("n"),
+    type: "state_reset",
+    at: nowIso(),
+    message: "State reset to demo defaults."
+  });
+  return snapshot();
 }
 

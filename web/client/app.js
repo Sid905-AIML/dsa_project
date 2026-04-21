@@ -185,9 +185,9 @@ function renderDriverView() {
   const reqContainer = $("driverRequests");
   reqContainer.innerHTML = "";
 
-  const relevant = (appState?.requests ?? []).filter((r) => r.status === "pending_driver" && (!r.assignedDriverId || r.assignedDriverId === driverId));
+  const relevant = (appState?.requests ?? []).filter((r) => r.status === "pending_driver");
   if (!relevant.length) {
-    reqContainer.innerHTML = `<div class="muted">No pending requests assigned to this driver.</div>`;
+    reqContainer.innerHTML = `<div class="muted">No pending requests right now.</div>`;
   } else {
     for (const r of relevant) {
       const el = document.createElement("div");
@@ -257,6 +257,8 @@ async function refreshAll() {
 
   setOptions($("fromCity"), graph.cities);
   setOptions($("toCity"), graph.cities);
+  setOptions($("shareFromCity"), graph.cities);
+  setOptions($("shareToCity"), graph.cities);
   renderDriverSelect();
   renderTopbar();
   drawMap();
@@ -267,29 +269,20 @@ async function refreshAll() {
 function shareCandidateCard(candidate, requestId) {
   const el = document.createElement("div");
   el.className = "item";
+  const hint = candidate.canUseDefaultPickupDrop
+    ? `<span class="pill" style="margin-top:6px">Pickup/drop on route: <b>YES</b></span>`
+    : `<span class="pill" style="margin-top:6px">Pickup/drop on route: <b>Choose manually</b></span>`;
+  const statusPill = `<span class="pill" style="margin-top:6px">Ride status: <b>${candidate.rideStatus}</b></span>`;
+  const canRequest = candidate.rideStatus === "active";
   el.innerHTML = `
     <div class="item__title">Ride ${candidate.rideId} · Driver: ${candidate.driverName}</div>
     <div class="item__sub">Route: ${routeText(candidate.route)} (distance: ${candidate.route.distance})</div>
-    <div class="item__sub">Pickup / Drop for sharing</div>
-    <div class="grid">
-      <label class="field">
-        <span>Pickup city</span>
-        <select class="pickup"></select>
-      </label>
-      <label class="field">
-        <span>Drop city</span>
-        <select class="drop"></select>
-      </label>
-    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">${statusPill}${hint}</div>
     <div class="item__actions">
-      <button class="btn btn--primary" data-act="propose">Request share</button>
+      <button class="btn btn--primary" data-act="propose" ${canRequest ? "" : "disabled"}>Request share</button>
       <button class="btn" data-act="show">Show path</button>
     </div>
   `;
-  setOptions(el.querySelector("select.pickup"), graph.cities);
-  setOptions(el.querySelector("select.drop"), graph.cities);
-  el.querySelector("select.pickup").value = $("fromCity").value;
-  el.querySelector("select.drop").value = $("toCity").value;
 
   el.addEventListener("click", async (e) => {
     const btn = e.target.closest("button");
@@ -299,8 +292,8 @@ function shareCandidateCard(candidate, requestId) {
       drawMap();
       return;
     }
-    const pickupCityId = el.querySelector("select.pickup").value;
-    const dropCityId = el.querySelector("select.drop").value;
+    const pickupCityId = $("shareFromCity").value;
+    const dropCityId = $("shareToCity").value;
     try {
       await apiPost("/api/share/propose", {
         requestId,
@@ -320,6 +313,18 @@ function shareCandidateCard(candidate, requestId) {
 
 function wireEvents() {
   $("refreshBtn").addEventListener("click", refreshAll);
+  $("resetBtn").addEventListener("click", async () => {
+    try {
+      await apiPost("/api/reset", {});
+      lastRequestId = null;
+      selectedRoute = null;
+      $("userRequestResult").innerHTML = "";
+      $("shareCandidates").innerHTML = "";
+      await refreshAll();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
   $("driverSelect").addEventListener("change", renderDriverView);
 
   $("submitRide").addEventListener("click", async () => {
@@ -329,6 +334,10 @@ function wireEvents() {
     const wantsSharing = $("wantsSharing").checked;
     if (!userName) {
       alert("Enter a username.");
+      return;
+    }
+    if (fromCityId === toCityId) {
+      alert("From and To cannot be the same city.");
       return;
     }
     try {
@@ -342,6 +351,9 @@ function wireEvents() {
         <div class="pill">Solo fare: <b>₹${req.soloFare}</b></div>
         <div class="muted" style="margin-top:8px">Route: ${routeText(req.route)} (distance: ${req.route.distance})</div>
       `;
+      // Default sharing pickup/drop to the request's From/To for convenience
+      $("shareFromCity").value = fromCityId;
+      $("shareToCity").value = toCityId;
       await refreshAll();
     } catch (err) {
       $("userRequestResult").textContent = err.message;
@@ -355,10 +367,14 @@ function wireEvents() {
       container.innerHTML = `<div class="muted">Submit a request with “Enable sharing” first.</div>`;
       return;
     }
+    if ($("shareFromCity").value === $("shareToCity").value) {
+      container.innerHTML = `<div class="muted">Share pickup and drop cannot be the same city.</div>`;
+      return;
+    }
     try {
       const res = await apiGet(`/api/share/candidates?requestId=${encodeURIComponent(lastRequestId)}`);
       if (!res.candidates.length) {
-        container.innerHTML = `<div class="muted">No active rides found going the same way right now.</div>`;
+        container.innerHTML = `<div class="muted">No rides found going the same way right now.</div>`;
         return;
       }
       for (const c of res.candidates) {

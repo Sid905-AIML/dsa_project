@@ -8,7 +8,8 @@ import {
   driverRespond,
   listShareCandidates,
   proposeShare,
-  decideShare
+  decideShare,
+  resetDemoState
 } from "./state.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,6 +17,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
+
+// Always start clean: no pre-made requests, all drivers idle.
+resetDemoState();
 
 app.get("/api/graph", (req, res) => {
   res.json(state.graph);
@@ -73,6 +77,10 @@ app.post("/api/share/decide", (req, res) => {
   }
   const result = decideShare({ rideId, proposalId, accept });
   res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.post("/api/reset", (req, res) => {
+  res.json({ ok: true, state: resetDemoState() });
 });
 
 // Static client
