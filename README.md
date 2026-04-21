@@ -1,3 +1,24 @@
+# 🚖 Cab Allocation System (DSA Project)
+
+## Features
+- Queue-based ride request handling (FIFO)
+- Driver allocation using nearest distance
+- Ride sharing support
+- Active ride tracking
+
+## Tech Stack
+- C++ (Backend logic)
+- HTML + React (Frontend UI)
+
+## How to Run
+
+### Backend:
+g++ main.cpp cab_system.cpp dispatch.cpp driver.cpp -o app
+./app
+
+### Frontend:
+Open index.html in browser
+
 # 🚖 Queue-Based Cab Allocation & Ride Sharing System
 
 A console-based cab booking simulator built in **C++** that demonstrates core **Data Structures & Algorithms** concepts — queues, greedy nearest-driver selection, and Manhattan distance geometry — in the context of a real-world ride-hailing problem.
