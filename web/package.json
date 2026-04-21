@@ -1,0 +1,13 @@
+{
+  "name": "punjab-cab-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
+
